@@ -1,0 +1,257 @@
+Marin Ioana-Valentina 325CB
+===============================================================================
+==================>>>>>> Protocoale de Comunicatie <<<<========================
+=====================>>>>>>>>>>>> Tema 1 <<<<<<<<<<<<<<<=======================
+===============================================================================
+
+	In cadrul temei am implementat procesul de dirijare a pachetelor dintr-un
+router. Un router are doua parti, dintre care pe noi ne va interesa numai partea 
+de data-plane. Aceasta implementeaza procesul de dirijare. 
+	Un router are mai multe interfete si poate receptiona datagrame pe oricare
+dintre acestea. Routerul trebuie sa transmita pachetul mai departe, catre un 
+calculator sau alt router direct conectat, in functie de regulile din tabela de 
+rutare.
+	Procesul de dirijare consta in primirea unui pachet, investigarea tabelei
+de rutare astfel obtinand ruta corespunzatoare si dirijarea pachetului. Dirijarea
+este un proces care are loc la nivelul 3(RETEA) din stiva OSI, lucrand cu adresa
+IP destinatie din pachetele dirijate.
+	Pasii procesului de dirijare sunt implementati in functia "main(...)"
+impreuna cu alocarea celor doua tabele, de rutare si tabela ARP, sortarea
+tabelei de rutare, lucru ce folosete la cautarea binara a celei mai specifice
+rute corespunzatoare unei adrese IP si de asemenea si crearea cozii de transmitere 
+unde vor fi pastrate pachetele a caror adresa MAC nu este cunoscuta local. 
+	Astfel in functia "main(...)" vor exista urmatorii pasi ai procesului de 
+dirijare a pachetelor:
+===============================================================================
+
+	1. Se primeste un pachet de la oricare din interfetele adiacente si ii
+extrag header-ul de ethernet.
+
+===============================================================================
+
+	2. Verific daca pachetul este de tip IP sau de tip ARP.
+		--------------------------------------------------------------
+		2.1. Daca este un pachet de tip IP, extrag IP header si verific
+		daca pachetul este destinat routerului. Daca este un astfel de
+		pachet, verific daca este un pachet de tip ICMP, si daca da
+		extrag ICMP header. Dupa ce am extras si acest header, verific
+		daca pachetul este de tip ICMP_ECHO request, si in caz afirmativ
+		router-ul raspunde cu(trimite un) pachet ICMP_ECHOREPLY si 
+		arunca pachetul original.
+		-----------------------------------------------------------------
+		2.2  Daca este un pachet cu TTL <= 1, sau un pachet catre o adresa
+		inexistenta in tabela de rutare, router-ul va trimite un pachet de
+		tipul ICMP_TIME_EXCEEDED.
+		------------------------------------------------------------------
+		2.3 Daca este un pachet cu checksum gresit, atunci router-ul va 
+		arunca pachetul. 
+		-----------------------------------------------------------------
+		2.4 Routerul va folosi functia "get_best_route(...)" care cauta in 
+		tabela de rutare cea mai specifica intrare(sa o numim f) astfel incat
+		"iph−>daddr&f.mask == f.prefix", folosind cautarea binara. O data
+		identificata, aceasta specifica adresa IP a next_hop pentru pachetul
+		nostru. In cazul in care nu se gaseste aceasta ruta, atunci router-ul
+		va trimite un pachet ICMP_DEST_UNREACH.
+		--------------------------------------------------------------------
+		2.5 Urmeaza decrementarea TTL-ului, setarea checksum-ului cu valoarea
+		zero si apoi calcularea sa folosind functia "ip_checksum(...)",
+		functie a carei implementarea am folosit-o pe cea din laboratorul 4
+		(Forwarding).
+		--------------------------------------------------------------------
+		2.6 Pentru a verifica daca este cunoscuta local adresa MAC a 
+		pachetului primit, am folosit functia "get_arp_entry(...)", 
+		implementata de asemenea cand am facut laboratorul 4 (Forwarding),
+		asa ca am luat implementarea sa direct din laborator(functia 
+		verifica daca IP-ul primit ca parametru, adica al pachetului primit
+		de catre router, corespunde cu un IP al vreunui host, prezente in 
+		tabela ARP). In cazul in care nu exista aceasta adresa IP inca in
+		tabela ARP, router-ul trimite un pachet de tip ARPOP_REQUEST, 
+		pentru a afla primi raspuns cu adresa MAC a pachetului. Dupa 
+		aceasta, pune pachetul in coada de pachete de transmitere si 
+		asteapta sa primeasca un pachet de tipul ARPOP_REPLY cu o adresa
+		MAC pentru unul din pachetele din coada.
+		--------------------------------------------------------------------
+		2.7 In cazul in care cunosteam adresa MAC a pachetului local, atunci
+		se completeaza campul din ethernet header, "ether->dhost" (adresa 
+		MAC a destinatiei) si pachetul este trimis de catre router pe interfata
+		data de cea mai specifica ruta din tabela de rutare, obtinuta la pasul 2.4.
+
+=======================================================================================
+
+	3. In cazul in care pachetul primit este de tip ARP, este extras header-ul ARP
+si vor exista dou cazuri:
+		-----------------------------------------------------------------------
+		3.1 In cazul in care pachetul primit de catre router este de tipul
+		ARPOP_REQUEST, atunci router-ul va raspunde cu un pachet de tip
+		ARPOP_REPLY.
+		-------------------------------------------------------------------
+		3.2 In cazul in care pachetul primit de catre router este de tipul
+		ARPOP_REPLY, adauga noua adresa MAC si IP-ul in tabela ARP folosind 
+		pachetul primit, mai precis folosind campurile "sender_protocol_address"
+		(un vector de uint8_t ce va fi folosit pentru a seta noua adresa IP
+		introdusa in tabela ARP) si "sender hardware address" (sha) ce va contine
+		adresa MAC corespunzatoare IP-ului deja calculat mai sus, ambele
+		campuri gasindu-se in ARP header-ul pachetului.
+		    Dupa aceasta, verificam coada de transmitere folosind functia 
+		"verify_forwarding_packets(...)", functie cu care vefificam daca
+		adresa IP corespunzatoare ultimei intrari in tabela ARP corespunde cu
+		adres IP a vreunui pachet ce se afla in coada de trasnmitere. In caz
+		afirmativ, atunci router-ul poate sa trimita si acest pachet, cunoscandu-i
+		adresa MAC si la nivel local, setandu-i-o inainte sa trimita pachetul.
+
+======================================================================================
+
+	Functiile folosite in implementarea temei sunt urmatoarele:
+
+• Functia "bit_to_little(...)":
+	Aceasta primeste un vector de elemente de tip "char" sub forma unei adrese IP si 
+returneaza o interpretare a sa sub forma unui numar pe 32 de biti (uint32_t) in formatul 
+little endian. Aceasta functie este folosita pentru a converti campurile din tabela de 
+rutare, prefix si masca, pentru a ajuta la sortarea acesteia crescator dupa prefixul
+calculat in acest mod si crescator dupa masca calculata in acest mod. Am folosit 
+aceasta conversie din cauza faptului ca in cazul in care calculam, spre exemplu,
+adresele IP "192.3.2.6" si "192.3.3.7" acestea sa fie apropiate ca valori, 
+fapt care nu se putea intampla daca valorile erau calculate in format big-endian.
+
+------------------------------------------------------------------------------------------
+
+• Functia "read_route_table(...)": 
+	Aceasta citeste tabela de rutare din fisierul de input "rtable.txt", linie cu linie,
+si converteste datele corespunzator tipului acestora. De asemenea, returneaza dimensiunea
+tabelei de rutare si redimensioneaza tabela la exact dimensiunea sa cand se ajunge la finalul
+fisierului din care se citesc datele.
+
+------------------------------------------------------------------------------------------
+
+• Functia "ip_checksum(...)":
+	Aceasta functie calculeaza si returneaza checksum-ul unui pachet. Functia este 
+aceeasi functie ca cea din laboratorul 4(Forwarding).
+
+-----------------------------------------------------------------------------------------
+
+• Functia "get_arp_entry(...)":
+	Aceasta functie cauta in tabela ARP, folosind adresa IP data ca parametru, intrarea
+corespunzatoarea acesteia, si intoarce un pointer catre aceasta.
+
+-------------------------------------------------------------------------------------
+
+• Functia "send_packet_reply(...,uint8_t type)":
+	Aceasta functie este folosita pentru trimiterea unui pachet de un anumit tip:
+		-> ICMP_ECHOREPLY
+		-> ICMP_TIME_EXCEEDED
+		-> ICMP_DEST_UNREACH
+	In cadrul acestei functii se  completeaza campurile specifice unui pachet,
+campurile header-ului ethernet, campurile header-ului IP si campurile header-ului ICMP,
+iar tipul pachetului de tip ICMP va fi setat cu valoarea primita ca parametru, in functie
+de ce tip de pachet este. Dupa ce se extrag toate header-ele si se completeaza corect
+datele despre pachet impreuna cu tipul acestuia, pachetul este trimis pe aceeasi interfata
+ca cea a pachetului primit de catre router.
+
+-----------------------------------------------------------------------------------------
+
+• Functia "comparator(...)":
+	Aceasta este functia data ca parametru functiei "qsort(...)", aflata in "main(...)",
+functie ce decide ordinea in care se va face sortarea tabelei de rutare: crescator in functie
+de prefixul calculat in format little-endian si in cazul in care prefixele sunt egale
+atunci se sorteaza crescator in functie de masca calculata in format little-endian.
+
+------------------------------------------------------------------------------------
+
+• Functia "binary_search(...)":
+	Aceasta functie reprezinta cautarea binara in tabela de rutare, cautand in O(log n)
+ruta cea mai specifica pentru adresa IP data ca parametru. Daca "dest_ip & rtable[mid]" 
+este o valoarea mai mica decat prefixul corespunzator elementului aflat la indexul "mid"
+in tabela de rutare, atunci vom cauta in intervalul (left, mid -1). In cazul in care 
+este mai mare "dest_ip & rtable[mid]" decat prefixul corespunzator, se va cauta ruta
+cea mai specifica in intervalul (mid+1, right). In cazul in care avem egalitate, 
+cautam ruta cu cea mai mare masca, iar aceasta fiind sortata crescator, vom creste 
+indexul pana cand conditia "dest_ip & rtable[index].sort_mask == rtable[index].sort_prefix"
+nu mai este indeplinita sau pana cand am ajuns la finalul tabelei de rutare, acest lucru
+insemnand ca am gasit cea mai specifica ruta pentru adresa IP data.
+
+---------------------------------------------------------------------------------------
+
+• Funcgtia "get_best_route(...)":
+	Aceasta functie returneaza cea mai specifica ruta din tabela de rutare pentru 
+adresa IP data ca parametru, apeland functia de cautare binara implementata anterior, 
+adresa IP data ca parametru fiind intai convertita folosit functia "ntohl(...)" ce face
+conversia big-endian -> little-endian.
+
+---------------------------------------------------------------------------------------
+
+• Functia "send_packet_arp_reply(...)":
+	Aceasta functie este folosita pentru trimiterea unui pachet de tip ARPOP_REPLY.
+	In cadrul acestei functii router-ul completeaza campurile specifice unui pachet,
+campurile header-ului ethernet si campurile header-ului ARP, iar tipul campului "ARP 
+opcode"(ar_op) va fi setat cu valoarea data ca parametru, si anume ARPOP_REPLY. Dupa 
+ce se extrag toate header-ele si se completeaza corect datele despre acesta si ARP
+opcode-ul sau, pachetul este trimis pe aceeasi interfata ca cea a pachetului primit de
+catre router. 
+	Valoarea data ca parametru este convertita in format big-endian folosind functia
+"htons(...)", in momentul in care va fi setat campul "ARP opcode".
+
+----------------------------------------------------------------------------------------
+	
+• Functia "update_arp_table(...)":
+	Aceasta functie adauga in tabela ARP o noua intrare, o noua linie in fisier ce va 
+contine o noua adresa MAC impreuna cu IP-ul corespunzator, folosind datele pachetului
+primit ca parametru. Acest pachet este de tipul "ARPOP_REPLY" si va ajuta la cunoasterea
+locala de catre router a unei adrese MAC folositoare pentru a dirija unele pachete din
+coada. 
+	Adresa IP cu care va fi setata aceasta noua intrare in tabela ARP se va obtine
+folosind campul "sender_protocol_address" (un vector de elemente de tip uint8_t), iar
+adresa MAC corespunzatoare va fi setata folosind campul "sender hardware address" (sha)
+al pachetului, ambele campuri gasindu-se in ARP header-ul pachetului. 
+	In final, dimensiunea tabelei de rutare va fi incrementata cu 1.
+
+--------------------------------------------------------------------------------------
+
+• Functia "check_packet(...)":
+	Aceasta functie verifica daca adresa IP a pachetului dat ca parametru corespunde
+cu cea a ultimei intrari in tabela ARP.
+
+---------------------------------------------------------------------------------------
+
+• Functia "verify_forwarding_packets(...)":
+	Aceasta functie verifica daca, avand o noua intrare in tabela ARP, putem 
+sa trimitem un pachet din coada pachetelor de transmitere. Este folosita o coada
+auxiliara cu care se va reface coada de pachete. 
+	Astfel, verificam daca adresa IP corespunzatoare ultimei intrari in tabela 
+ARP corespunde cu adresa IP a vreunui pachet ce se afla in coada de trasnmitere. In caz
+afirmativ, atunci router-ul poate sa trimita si acest pachet, cunoscandu-i adresa MAC 
+si la nivel local, setandu-i-o inainte sa trimita pachetul.
+
+---------------------------------------------------------------------------------------
+
+• Functia "send_arp_request(...)":
+	Aceasta functie este folosita pentru trimiterea unui pachet de tip ARPOP_REQUEST.
+	In cadrul acestei functii router-ul completeaza campurile specifice unui pachet,
+campurile header-ului ethernet si campurile header-ului ARP, iar tipul campului "ARP 
+opcode"(ar_op) va fi setat cu valoarea data ca parametru, si anume ARPOP_REQUEST. Dupa 
+ce se extrag toate header-ele si se completeaza corect datele despre acesta si ARP
+opcode-ul sau, pachetul este trimiS pe interfata rutei cea mai specifica din tabela 
+de rutare corespunzatoare adresei IP date ca parametru; de asemenea adresa MAC din header-ul
+ARP (mai precis campul "target_hardware_address") nu este completata, deoarece trimitand
+un pachet de tipul ARPOP_REQUEST, asta dorim sa obtinem.
+	Valoarea data ca parametru este convertita in format big-endian folosind functia
+"htons(...)", in momentul in care va fi data ca parametru functiei "send_arp_request(...)".
+
+-----------------------------------------------------------------------------------------
+
+• Functia "put_packet_in_queue(...)":
+	Aceasta functie copiaza datele pachetului primit ca parametru intr-un pachet nou,
+de tipul "packet*", si introduce acest nou pachet format in coada pachetelor de trasmitere.
+
+----------------------------------------------------------------------------------------
+
+	Tabela ARP impreuna cu dimensiunea sa sunt definite global, iar tabela de rutare
+are doua campuri in plus "sort_prefix" si "sort_mask", doua variabile de tip "uint32_t",
+care sunt in format little-endian, campuri folositoare cautarii binare. 
+
+=========================================================================================
+
+-> Probleme intampinate:
+	Ruland de mai multe ori checker-ul la ore diferite mi s-a intamplat sa primesc
+punctaje foarte diferite, o tema care in momentul actual era de 95 de puncte de exemplu
+a putut avea peste cateva ore 0 puncte pe checker. Din aceasta cauza am ales sa incarc
+si pe vmchecker, in cazul in care apar mai multe submisii.
