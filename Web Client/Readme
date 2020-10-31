@@ -1,0 +1,259 @@
+ -------------------------------
+ | Marin Ioana-Valentina 325CB |
+ -------------------------------
+===============================================================================
+===============================================================================
+====================>>> PROTOCOALE DE COMUNICATIE <<<==========================
+==================>>>Tema 2 Client Web. Comunicatie cu <<<=====================
+=============================>>> REST API <<<==================================
+===============================================================================
+===============================================================================
+
+
+   ---> 1. Obiectivele temei de casa:
+	Scopul temei este un client scris in C/C++ care sa interactioneze cu un
+REST API. 
+	--> Obiectivele pe care le urmarim sunt:
+		• intelegerea mecanismelor de comunicare prin HTTP
+		• interactiunea cu un REST API
+		• intelegerea conceptelor des folosite in  web precum JSONn
+		sesiune, JWT
+		• utilizarea unor biblioteci externe pentru manipularea 
+		obiectelor JSON REST API.
+
+   ---> 2. Descrierea modului de implementare (idee generala):
+	-----------------------------------------------------------------------
+		
+	Interactiunea cu SERVERUL se face prin citirea unor comenzi de la
+tastatura impreuna cu parametrii lor aditionali (in caz ca au) si trimiterea
+catre server pritr-o ruta de acces care executa POST, GET sau DELETE pe id-uri
+folosind pentru fiecare tip de comanda o functie ce realizeaza acest lucru.
+	In urma citirii unei comenzi de la tastatura, in functia specifica 
+comenzii respective clientul va forma obiectul JSON (daca e cazul), va executa
+cererea catre server si va afisa raspunsul acestuia (de succes sau de eroare).
+Procesul se repeta pana la introducerea comenzii "exit".
+
+	-----------------------------------------------------------------------
+
+	Comenzile interpretate de la tastatura de catre client sunt urmatoarele:
+
+-> register: 
+------------
+			------------------------
+			| register_client(...) |
+			------------------------
+
+	Aceasta comanda ofera prompt pentru username si password. Dupa ce este 
+citita de la tasatura numele acestei comenzi, este actualizat "URL"-ul folositor
+pentru a alcatui ruta de acces specifica pentru aceasta comanda si sunt citite
+de la tastatura username-ul si parola. 
+	Pentru a ne asigura ca nu pierdem conexiunea cu serverul, deschidem conexiunea
+de fiecare data inainte de a apela fiecare functie corespunzatoare unei comenzi.
+Astfel riscul de a pierde sesiunea cu serverul este minim.
+	Functia "register_client(..)" primeste ca parametru socket-ul pe care 
+trimitem date catre server, username-ul si parola clientului, "body_data" ce
+reprezinta datele pe care le vom parsa in format JSON in functia 
+"compute_post_request(...)" , host-ul, url-ul specific acestei comenzi si 
+"content_type"-ul care va fi acelasi pentru fiecare comanda ("application/json").
+	Se copiaza datele in vectorul de String-uri alocat pentru "body_data"
+si se alcatuieste mesajul pe care dorim sa il trimitem catre SERVER folsosind
+"compute_post_request(...)".
+	Mesajul este trimis catre server si dupa ce se primeste raspunsul, 
+verificam statusul raspunsului si in functie de acesta afisam un mesaj de eroare
+sau de succes.
+
+
+-> login:
+---------
+			
+				----------------------
+				| login_client (...) |
+				----------------------
+	
+	Aceasta comanda ofera prompt pentru username si password. Dupa ce este 
+citita de la tasatura numele acestei comenzi, este actualizat "URL"-ul folositor
+pentru a alcatui ruta de acces specifica pentru aceasta comanda si sunt citite
+de la tastatura username-ul si parola. 
+	Pentru a ne asigura ca nu pierdem conexiunea cu serverul, deschidem conexiunea
+de fiecare data inainte de a apela fiecare functie corespunzatoare unei comenzi.
+Astfel riscul de a pierde sesiunea cu serverul este minim.
+	Functia "login_client(...)" primeste ca parametru socket-ul pe care 
+trimitem date catre server, username-ul si parola clientului, "body_data" ce
+reprezinta datele pe care le vom parsa in format JSON in functia 
+"compute_get_request(...)" , host-ul, url-ul specific acestei comenzi si 
+"content_type"-ul care va fi acelasi pentru fiecare comanda ("application/json")
+si un vector de caractere ce va reprezenta cookie-ul preluat din raspunsul
+primit de la server.
+	Se copiaza datele in vectorul de String-uri alocat pentru "body_data"
+si se alcatuieste mesajul pe care dorim sa il trimitem catre SERVER folsosind
+"compute_get_request(...)".
+	Mesajul este trimis catre server si dupa ce se primeste raspunsul, 
+verificam statusul raspunsului si in functie de acesta afisam un mesaj de eroare
+sau de succes.
+	De asemenea, pentru a confirma pentru urmatoarele comenzi faptul ca
+clientul este logat, extragem din raspunsul serverului cookie-ul ce demonstreaza
+logarea clientului si de asemenea tinem evidenta faptului ca suntem logati prin
+variabila "cookies_count" ce este setata cu valoarea "1" daca suntem logati
+si avem un cookie (daca suntem logati) si cu valoarea "0" daca am primit comanda
+"logout" si nu mai suntem logati, astfel cookie-ul vechi nu mai este valabil.
+
+
+-> enter_library:
+-----------------
+
+				-----------------------
+				| enter_library (...) |
+				-----------------------
+	
+	Aceasta comanda cere acces in biblioteca. 
+	In momentul primirii acestei comenzi deschidem iar conexiunea cu serverul
+si apelam functia "enter_library(...)".
+	Folosind aceasta functie trimitem mesajul catre server folosind 
+"compute_get_request(...)" si cookie-ul dat ca parametru si dupa ce primim 
+raspunsul de la server, verificam statusul raspunsului si daca a fost primit 
+cu succes mesajul clientului de catre server atunci extragem din raspunsul 
+acestuia un token, ce ne va folosi ca "cheie" pentru a intra in biblioteca, 
+asta insemnand ca avem acces la biblioteca.	
+	In momentul in care iesim din functie pastram token-ul obtinut din 
+raspunsul serverului si actualizam faptul ca avem acces in biblioteca, 
+setand cu valoarea "1" variabila "tokens_count".
+
+
+-> get_books:
+-------------
+			
+				-------------------
+				| get_books (...) |
+				-------------------
+ 
+	Aceasta comanda obtine informatii despre cartiile pe care clientul le
+are in biblioteca. In urma acestei comenzi sunt afisate id-ul fiecarei carti
+si titlul acesteia.
+	In momentul primirii acestei comenzi, redeschidem iar conexiunea cu 
+serverul si apelam functia "get_books(...)".
+	Folosind aceasta functie trimitem mesajul catre server utilizand 
+"compute_get_request(...)" si token-ul retinut in urma comenzii "enter_library",
+demonstrand astfel ca avem acces la biblioteca.
+	Trimitem astfel mesajul catre server si in momentul in care primim 
+raspuns de la acesta, verificam statusul acestuia si afisam un mesaj de succes 
+sau de eroare, iar in caz de succes extragem si informatiile despre carti din 
+raspunsul serverului.
+	
+
+-> get_book:
+------------
+
+				------------------
+				| get_book (...) |
+				------------------
+	
+	Aceasta comanda cere informatii despre o carte si ofera prompt pentru
+id-ul cartii.
+	In momentul primirii acestei comenzi, citim de la tastatura id-ul cartii, 
+actualizandu-se astfel si url-ul corespunzator pentru aceasta comanda. 
+De asemenea se redeschide si conexiunea cu serverul.
+	Apeland functia "get_book(..)", alcatuim mesajul pe care il dorim sa 
+il trimitem catre server folosind functia "compute_get_request" si il trimitem
+catre acesta. Dupa ce primim raspunsul de la server, verificam statusul acestuia si
+afisam un mesaj de succes ce vor reprezenta informatiile despre cartea respectiva
+sau un mesaj de eroare in caz ca id-ul cartii este invalid.
+
+
+-> add_book:
+------------
+
+				------------------
+				| add_book (...) |
+				------------------
+
+	Aceasta comanda adauga o carte, oferind prompt pentru titlu, autor, gen
+editura si numarul de pagini ale cartii.
+	In momentul primirii acestei comenzi, citim de la tastatura toate 
+informatiile necesare in ceea ce priveste o carte si de asemenea deschidem iar 
+conexiunea cu serverul.
+	Apeland functia "add_book(...)", alcatuim mesajul pe care dorim sa il 
+trimitem catre server folosind funcia "compute_post_request(..)" si il trimitem
+catre server. 
+	In momentul in care primim raspunsul de la server, verificam statusul
+acestuia si afisam un mesaj de succes sau de eroare in functie de valoarea 
+stocata in status.
+
+
+-> delete_book:
+---------------
+
+				---------------------
+				| delete_book (...) |
+				---------------------
+
+	Aceasta comanda sterge o carte a clientului si ofera prompt pentru
+id-ul cartii.
+	In momentul primirii acestei comenzi, si citim de la tastatura id-ul 
+cartii, actualizandu-se astfel si url-ul corespunzator pentru aceasta comanda. 
+De asemenea se redeschide si conexiunea cu serverul.
+	Apeland functia "delete_book(..)", alcatuim mesajul pe care il dorim sa 
+il trimitem catre server folosind functia "compute_delete_request" si il trimitem
+catre acesta. Dupa ce primim raspunsul de la server, verificam statusul acestuia si
+afisam un mesaj de succes ce vor reprezenta informatiile despre cartea respectiva
+sau un mesaj de eroare in caz ca id-ul cartii este invalid.
+
+
+-> logout:
+----------
+
+				----------------
+				| logout (...) |
+				----------------
+
+	Aceasta comanda efectueaza delogarea clientului.
+	In momentul primirii acestei comenzi, actualizam url-ul specific acesteia
+si redeschidem conexiunea cu serverul. 
+	Folosind functia "logout(...)", alcatuim mesajul ce trebuie trimis catre 
+server utilizand "compute_get_request(...)", il trimitem catre server si in 
+momentul in care primim inapoi raspunsul de la server, verificam statusul acestuia 
+si afisam un mesaj de succes sau de eroare in functie de acesta. 
+	La iesirea din functie, actualizam faptul ca suntem delogati si ca nu mai
+avem acces la biblioteca, setand variabilele "tokens_count" si "cookies_count"
+cu valoarea 0.
+
+
+	
+-> exit:
+--------
+	In momentul in care clientul primeste aceasta comanda de la tastatura 
+este data instructiunea "break" pentru a iesi din bucla infinita, astfel iesind
+din program, eliberam memoria folosind functia "free_data(..)" si inchidem 
+socket-ul pe care clientul comunica cu serverul.
+
+-------------------------------------------------------------------------------
+
+
+	--> 3. Precizari suplimentare:
+	-------------------------------
+		
+		-> La intrarea in program se aloca memorie pentru "body_data"
+si pentru "cookies", ce vor fi folosite pentru a stoca cookie-urile primite,
+in ceea ce priveste "cookies" si pentru a fi dat ca parametru pentru functia 
+"compute_post_request(...)".
+
+		-> Host-ul si content-type sunt aceleasi pentru fiecare comanda
+asa ca sunt setate in afara buclei "while(1)" cu valorile corespunzatoare.
+
+		-> In cazul in care nu este returnat un cookie sau nu este 
+returnat un token, acestea vor avea valoarea setata cu "error" pentru ca 
+in momentul trimiterii unui mesaj server-ul sa isi dea seama ca nu este un 
+mesaj corect, neavand token sau cookie.
+
+		-> In cazul in care suntem deja logati cu un cont, nu ne 
+mai putem loga cu un alt cont decat daca efectuam comanda "logout".
+De asemenea, nu putem da comanda "register" daca suntem deja logati cu un cont.
+Acest lucru este contorizat de variabila "is_user_logged" ce este setata cu
+valoarea 1 daca suntem deja logati cu un cont, cu 0 altfel.
+		
+		-> In cazul in care in biblioteca avem foarte multe carti
+(sute de mii sau milioane) timpul comenzii "get_books" este putin mai mare
+pana se primeste raspunsul de la server. Deci totul este okay daca se asteapta
+cateva secunde pana apare output-ul la stdout :).
+
+===============================================================================
+
